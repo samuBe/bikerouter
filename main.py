@@ -1,11 +1,8 @@
 import streamlit as st
 import replicate
+import os
 
 st.write('hello world')
-
-if 'REPLICATE_API_TOKEN' in st.secrets:
-    replicate_api = st.secrets['REPLICATE_API_TOKEN']
-
 
 input = {
     "prompt": "List 10 places to visit in 2024",
