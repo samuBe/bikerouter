@@ -9,6 +9,7 @@ from streamlit_searchbox import st_searchbox
 from typing import List 
 import requests
 import uuid
+import pandas as pd
 
 
 # Put some nice things at the top
@@ -31,20 +32,46 @@ def search_city(searchterm: str) -> List[any]:
        return [] 
     try:
         suggestions = res.json()['suggestions']
-        results = list(map(lambda s: s['name'] + ', ' + s['place_formatted'],suggestions))
+        results = list(map(lambda s: (s['name'] + ', ' + s['place_formatted'], s['mapbox_id'] ),suggestions))
         return results
     except:
         return []
     return []
 
+def retrieve_city(id):
+    url = f"https://api.mapbox.com/search/searchbox/v1/retrieve/{id}"
+    params = {"access_token": mapbox_token,"session_token": token}
+    res = requests.get(url, params=params)
+    if res.status_code != 200:
+        return []
+    try:
+        return res.json()['features'][0]
+    except:
+        return []
+    return []
+
+def retrieve_landmark(name, proximity):
+    url = "https://api.mapbox.com/search/searchbox/v1/forward"
+    params = {"access_token": mapbox_token, "q": name, "proximity": proximity, 'types': 'poi', 'poi_category': 'tourist_attraction,museum,monument,historic'}
+    res = requests.get(url, params=params)
+    if res.status_code != 200:
+        return []
+    try:
+        print(res.text)
+        return res.json()['features'][0]
+    except:
+        return []
+    return []
+
+
 # pass search function to searchbox
-city = st_searchbox(
+city_id = st_searchbox(
     search_city,
     key="city",
 )
 
 @st.cache_resource
-def getChain():
+def get_chain():
 
     output_parser = CommaSeparatedListOutputParser()
     format_instructions = output_parser.get_format_instructions()
@@ -56,7 +83,7 @@ def getChain():
 
 
     prompt = PromptTemplate(
-        template="""Return a comma-separated list of the 10 best landmarks in {city}. Only return the list
+        template="""Return a comma-separated list of at least 10 of the best landmarks in {city}. Only return the list
         {format_instructions}
             """,
         input_variables=["city"],
@@ -66,11 +93,29 @@ def getChain():
     chain = prompt | llm | output_parser
     return chain
 
+def get_landmark_locations(landmarks, long, lat):
+    data = []
+    for lm in landmarks:
+        name = lm
+        features = retrieve_landmark(lm, f"{long},{lat}")
+        coor = features['geometry']['coordinates']
+        long, lat = coor
+        data.append([name, long, lat])
+
+    # put into a pandas dataframe
+    df = pd.DataFrame(data=data, columns=['name', 'longitude', 'latitude'])
+    print(df)
+    return df
+
 
 # Run the llm
-chain = getChain()
-if city and len(city)>0:
-    output = chain.invoke({"city": city})
-    print(output)
-    st.write(output)
+chain = get_chain()
+if city_id and len(city_id)>0:
+    city = retrieve_city(city_id)
+    coor = city['geometry']['coordinates']
+    long, lat = coor
+    landmarks = chain.invoke({"city": city['properties']['full_address'] })
+    landmark_locations = get_landmark_locations(landmarks, long, lat)
+    st.map(landmark_locations)
+    st.write(landmarks)
 
