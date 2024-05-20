@@ -62,7 +62,6 @@ def retrieve_landmark(name, proximity):
     if res.status_code != 200:
         return []
     try:
-        print(res.text)
         return res.json()['features'][0]
     except:
         return []
@@ -93,7 +92,7 @@ def get_landmark_chain():
     llm = get_llm()
 
     prompt = PromptTemplate(
-        template="""Return a comma-separated list of at least 10 of the best landmarks in {city}. Only return the list
+        template="""Return a comma-separated list of the 10 best landmarks in {city}. Only return the list
         {format_instructions}
             """,
         input_variables=["city"],
@@ -123,6 +122,27 @@ def run_llm(parameters):
     chain = get_landmark_chain()
     return chain.invoke(parameters)
 
+@st.cache_data
+def tsp(user_input):
+    profile = "mapbox/cycling"
+    coordinates = ";".join([f"{row['longitude']},{row['latitude']}" for index, row in user_input[user_input['Include']].iterrows()])
+    link = f"https://api.mapbox.com/optimized-trips/v1/{profile}/{coordinates}"
+    params = {"access_token": mapbox_token}
+    res = requests.get(link, params=params)
+    print(res.text)
+    if res.status_code != 200:
+        return []
+    try:
+        print(res.text)
+        return res.json()
+    except:
+        return []
+    return []
+
+@st.cache_data
+def create_route():
+    llm = get_llm()
+
 
 # Run the llm
 chain = get_landmark_chain()
@@ -136,5 +156,20 @@ if city_id and len(city_id)>0:
     user_input = st.data_editor(landmark_locations, hide_index=True, disabled=('name', 'longitude', 'latitude'), 
                    column_config= {'longitude': None, 'latitude': None}, key='user_input', use_container_width=True)
     st.map(user_input[user_input['Include']])
+    output = tsp(user_input)
+    st.json(output)
 
+    # Download the route description
+    route = create_route()
+
+    #
+    route_word = None
+
+    st.download_button(
+            label='Download the bike route!',
+            data=route_word,
+            file_name='',
+            mime=''
+    )
+    
 
