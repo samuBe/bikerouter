@@ -13,8 +13,11 @@ import pandas as pd
 
 
 # Put some nice things at the top
-st.title('Bike router')
-st.write('hello world')
+st.title('BikeRouter')
+st.markdown("Made by [Samuel Berton](https://samuelberton.com) using [Streamlit](https://streamlit.io/)")
+
+with open('description.md') as description:
+    st.markdown(description.read())
 
 mapbox_token = os.getenv('MAPBOX_TOKEN')
 token = uuid.uuid4()
@@ -38,6 +41,7 @@ def search_city(searchterm: str) -> List[any]:
         return []
     return []
 
+@st.cache_data
 def retrieve_city(id):
     url = f"https://api.mapbox.com/search/searchbox/v1/retrieve/{id}"
     params = {"access_token": mapbox_token,"session_token": token}
@@ -50,6 +54,7 @@ def retrieve_city(id):
         return []
     return []
 
+@st.cache_data
 def retrieve_landmark(name, proximity):
     url = "https://api.mapbox.com/search/searchbox/v1/forward"
     params = {"access_token": mapbox_token, "q": name, "proximity": proximity, 'types': 'poi', 'poi_category': 'tourist_attraction,museum,monument,historic'}
@@ -71,16 +76,21 @@ city_id = st_searchbox(
 )
 
 @st.cache_resource
-def get_chain():
-
-    output_parser = CommaSeparatedListOutputParser()
-    format_instructions = output_parser.get_format_instructions()
-
+def get_llm():
     llm = Replicate(
                model="snowflake/snowflake-arctic-instruct",
                model_kwargs={'temperature':0}
     )
+    return llm
 
+
+@st.cache_resource
+def get_landmark_chain():
+
+    output_parser = CommaSeparatedListOutputParser()
+    format_instructions = output_parser.get_format_instructions()
+
+    llm = get_llm()
 
     prompt = PromptTemplate(
         template="""Return a comma-separated list of at least 10 of the best landmarks in {city}. Only return the list
@@ -93,6 +103,7 @@ def get_chain():
     chain = prompt | llm | output_parser
     return chain
 
+@st.cache_data
 def get_landmark_locations(landmarks, long, lat):
     data = []
     for lm in landmarks:
@@ -100,22 +111,30 @@ def get_landmark_locations(landmarks, long, lat):
         features = retrieve_landmark(lm, f"{long},{lat}")
         coor = features['geometry']['coordinates']
         long, lat = coor
-        data.append([name, long, lat])
+        data.append([name, long, lat, True])
 
     # put into a pandas dataframe
-    df = pd.DataFrame(data=data, columns=['name', 'longitude', 'latitude'])
+    df = pd.DataFrame(data=data, columns=['Name', 'longitude', 'latitude', 'Include'])
     print(df)
     return df
 
+@st.cache_data
+def run_llm(parameters):
+    chain = get_landmark_chain()
+    return chain.invoke(parameters)
+
 
 # Run the llm
-chain = get_chain()
+chain = get_landmark_chain()
 if city_id and len(city_id)>0:
     city = retrieve_city(city_id)
     coor = city['geometry']['coordinates']
     long, lat = coor
-    landmarks = chain.invoke({"city": city['properties']['full_address'] })
-    landmark_locations = get_landmark_locations(landmarks, long, lat)
-    st.map(landmark_locations)
-    st.write(landmarks)
+    landmarks = run_llm({"city": city['properties']['full_address'] })
+    st.session_state.landmark_locations = get_landmark_locations(landmarks, long, lat)
+    landmark_locations = st.session_state.landmark_locations
+    user_input = st.data_editor(landmark_locations, hide_index=True, disabled=('name', 'longitude', 'latitude'), 
+                   column_config= {'longitude': None, 'latitude': None}, key='user_input', use_container_width=True)
+    st.map(user_input[user_input['Include']])
+
 
