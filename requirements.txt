@@ -11,6 +11,8 @@ charset-normalizer==3.3.2
 click==8.1.7
 dataclasses-json==0.6.6
 frozenlist==1.4.1
+geographiclib==2.0
+geopy==2.4.1
 gitdb==4.0.11
 GitPython==3.1.43
 h11==0.14.0
