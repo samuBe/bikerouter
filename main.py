@@ -108,7 +108,9 @@ def get_landmark_locations(landmarks, long, lat):
     data = []
     for lm in landmarks:
         name = lm
+        print(lm)
         features = retrieve_landmark(lm, f"{long},{lat}")
+        print(features)
         coor = features['geometry']['coordinates']
         long, lat = coor
         data.append([name, long, lat, True])
@@ -117,10 +119,38 @@ def get_landmark_locations(landmarks, long, lat):
     df = pd.DataFrame(data=data, columns=['Name', 'longitude', 'latitude', 'Include'])
     return df
 
+@st.cache_resource
+def get_fallback_chain():
+
+    output_parser = CommaSeparatedListOutputParser()
+    format_instructions = output_parser.get_format_instructions()
+    
+    llm = get_llm()
+
+    prompt = PromptTemplate(
+        template="""You were asked to make a list of landmarks in {city}, can you format {output_string} as a comma-separated list. Don't return any introduction, just the list.
+        {format_instructions}
+            """,
+        input_variables=["city", "output_string"],
+        partial_variables={"format_instructions": format_instructions},
+    )
+
+    chain = prompt | llm | output_parser
+
+    return chain
+
 @st.cache_data
 def run_llm(parameters):
     chain = get_landmark_chain()
-    return chain.invoke(parameters)
+    out = chain.invoke(parameters)
+    if len(out) != 10:
+    # TODO add fallback if not good
+        out_string = ' '.join(out)
+        parameters["output_string"] = out_string
+        fallback = get_fallback_chain()
+        out = fallback.invoke(parameters)
+        return out
+    return out
 
 @st.cache_data
 def tsp(chosen_landmarks):
