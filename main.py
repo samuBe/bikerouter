@@ -11,6 +11,7 @@ import requests
 import uuid
 import pandas as pd
 import markdown
+from geopy import distance
 
 
 # Put some nice things at the top
@@ -104,15 +105,21 @@ def get_landmark_chain():
     return chain
 
 @st.cache_data
-def get_landmark_locations(landmarks, long, lat):
+def get_landmark_locations(landmarks, long_city, lat_city):
     data = []
     for lm in landmarks:
         name = lm
         print(lm)
-        features = retrieve_landmark(lm, f"{long},{lat}")
-        print(features)
+        features = retrieve_landmark(lm, f"{long_city},{lat_city}")
+        # if mapbox does not find anything, continue
+        if len(features)==0:
+            continue
         coor = features['geometry']['coordinates']
         long, lat = coor
+        # Check if the distance is unreasonable
+        dist= distance.distance((lat_city, long_city), (lat, long)).km
+        if dist>10:
+            continue
         data.append([name, long, lat, True])
 
     # put into a pandas dataframe
