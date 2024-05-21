@@ -77,10 +77,10 @@ city_id = st_searchbox(
 )
 
 @st.cache_resource
-def get_llm():
+def get_llm(temperature=0, max_tokens=512, top_k=50):
     llm = Replicate(
                model="snowflake/snowflake-arctic-instruct",
-               model_kwargs={'temperature':0}
+               model_kwargs={'temperature':temperature, 'max_new_tokens': max_tokens, 'top_k': top_k }
     )
     return llm
 
@@ -149,7 +149,9 @@ def get_fallback_chain():
 @st.cache_data
 def run_llm(parameters):
     chain = get_landmark_chain()
+    print(chain)
     out = chain.invoke(parameters)
+    print('hello')
     if len(out) != 10:
     # TODO add fallback if not good
         out_string = ' '.join(out)
@@ -175,22 +177,47 @@ def tsp(chosen_landmarks):
     return []
 
 @st.cache_data
-def create_route(parameters):
-    llm = get_llm()
+def create_route(city, landmarks):
+    llm = get_llm(0.2, 2048, 15)
     prompt = PromptTemplate(
-        template="""You are an experienced tour guide in {city}. Create a bike route for {city} in markdown, passing by the following landmarks: {landmarks}. The route should be clearly connected through the text.
+        template="""You are an experienced tour guide in {city}. You love telling more about landmarks in a short way. Create a bike route for {city} in markdown, using headings with ##, passing by the following landmarks: 
+        {landmarks}. 
+        The route should be clearly connected through the text. End with the introduction of the next landmark {end}, as if it was the next destination, but don't discuss it.
         An excerpt for Paris: 
         ## Place d'Alma
         Our first stop is Place d'Alma with a superb view of the **Eiffel Tower**. The Eiffel Tower is a wrought-iron lattice tower on the Champ de Mars in Paris, France.
-        It is named after the engineer Gustave Eiffel, whose company designed and built the tower from 1887 to 1889. 
-        Locally nicknamed "La dame de fer" (French for "Iron Lady"), it was constructed as the centerpiece of the 1889 World's Fair, and to crown the centennial anniversary of the French Revolution. 
+        It is named after the engineer Gustave Eiffel, whose company designed and built the tower from 1887 to 1889 as the centerpiece of the 1889 World's Fair. 
         Although initially criticised by some of France's leading artists and intellectuals for its design, it has since become a global cultural icon of France and one of the most recognisable structures in the world.
         Next step, the **Arc the Triomphe**...
         """, 
-       input_variables=["landmarks", "city"]
+       input_variables=["landmarks", "city", "end"]
     )
     chain = prompt | llm
-    return chain.invoke(parameters)
+    landmarks_string = "\n".join([f"{row['Name']}" for index, row in landmarks.iloc[:5,:].iterrows()])
+    print(landmarks_string)
+    part_one = chain.invoke({'city': city, 'landmarks':landmarks_string, 'end': landmarks.iloc[5,:]['Name']})
+    if len(landmarks)<5:
+        return part_one
+    prompt = PromptTemplate(
+        template="""You are an experienced tour guide in {city}. You love telling more about landmarks in a short way. Create a bike route for {city} in markdown, using headings with ##, passing by the following landmarks: 
+        {landmarks}. 
+        The route should be clearly connected through the text. Start your explanation with Continuing from {previous}
+        An excerpt for Paris: 
+        ## Place d'Alma
+        Our first stop is Place d'Alma with a superb view of the **Eiffel Tower**. The Eiffel Tower is a wrought-iron lattice tower on the Champ de Mars in Paris, France.
+        It is named after the engineer Gustave Eiffel, whose company designed and built the tower from 1887 to 1889 as the centerpiece of the 1889 World's Fair. 
+        Although initially criticised by some of France's leading artists and intellectuals for its design, it has since become a global cultural icon of France and one of the most recognisable structures in the world.
+        Next step, the **Arc the Triomphe**...
+        """, 
+        input_variables=["landmarks", "city", "previous"]
+    )
+    chain = prompt | llm
+    landmarks_string = "\n".join([f"{row['Name']}" for index, row in landmarks.iloc[5:,:].iterrows()])
+    part_two = chain.invoke({'city': city, 'landmarks':landmarks_string, 'previous': landmarks.iloc[4,:]['Name']})
+    return part_one + " " + part_two
+
+
+
 
 @st.cache_data
 def to_html(data, filename='BikeRouter-route'):
@@ -200,10 +227,8 @@ if 'route' not in st.session_state:
     st.session_state.route = None
 
 def generate_route(city, stops):
-    parameters = {"city": city['properties']['full_address'], "landmarks": stops}
-    route = create_route(parameters)
+    route = create_route(city['properties']['full_address'], stops)
     st.session_state.route = route
-    pass
 
 
 # Run the llm
@@ -226,9 +251,8 @@ if city_id and len(city_id)>0:
 
     waypoints = map(lambda wp: wp['waypoint_index'],output['waypoints'])
     stops  = chosen_landmarks.iloc[waypoints, :]
-    stops_string = "\n".join([f"{index}: {row['Name']}" for index, row in stops.iterrows()])
 
-    st.button('Generate route', on_click=lambda : generate_route(city, stops_string))
+    st.button('Generate route', on_click=lambda : generate_route(city, stops))
     
 
 route = st.session_state.route
