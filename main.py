@@ -58,7 +58,7 @@ def retrieve_city(id):
 @st.cache_data
 def retrieve_landmark(name, proximity):
     url = "https://api.mapbox.com/search/searchbox/v1/forward"
-    params = {"access_token": mapbox_token, "q": name, "proximity": proximity, 'types': 'poi', 'poi_category': 'tourist_attraction,museum,monument,historic'}
+    params = {"access_token": mapbox_token, "q": name, "proximity": proximity, 'types': 'poi', 'poi_category': 'tourist_attraction,museum,monument,historic,park,church,place of workship'}
     res = requests.get(url, params=params)
     if res.status_code != 200:
         return []
