@@ -1,9 +1,8 @@
 import streamlit as st
-from langchain.chains import LLMChain
 import replicate
 from langchain_community.llms import Replicate
 from langchain_core.prompts import PromptTemplate
-from langchain.output_parsers import CommaSeparatedListOutputParser
+from langchain_core.output_parsers import CommaSeparatedListOutputParser
 import os
 from streamlit_searchbox import st_searchbox
 from typing import List 
@@ -193,7 +192,8 @@ def create_route(city, landmarks):
        input_variables=["landmarks", "city", "end"]
     )
     chain = prompt | llm
-    landmarks_string = "\n".join([f"{row['Name']}" for index, row in landmarks.iloc[:5,:].iterrows()])
+    landmarks_string = "
+".join([f"{row['Name']}" for index, row in landmarks.iloc[:5,:].iterrows()])
     print(landmarks_string)
     part_one = chain.invoke({'city': city, 'landmarks':landmarks_string, 'end': landmarks.iloc[5,:]['Name']})
     if len(landmarks)<5:
@@ -212,7 +212,8 @@ def create_route(city, landmarks):
         input_variables=["landmarks", "city", "previous"]
     )
     chain = prompt | llm
-    landmarks_string = "\n".join([f"{row['Name']}" for index, row in landmarks.iloc[5:,:].iterrows()])
+    landmarks_string = "
+".join([f"{row['Name']}" for index, row in landmarks.iloc[5:,:].iterrows()])
     part_two = chain.invoke({'city': city, 'landmarks':landmarks_string, 'previous': landmarks.iloc[4,:]['Name']})
     return part_one + " " + part_two
 
@@ -267,4 +268,3 @@ if route and len(route)>0:
             file_name='BikeRouter-route.html',
             mime='text/html'
     )
-
